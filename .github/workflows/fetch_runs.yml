@@ -1,0 +1,38 @@
+name: Automatic Meteo Run Fetcher
+
+on:
+  schedule:
+    # Esecuzione automatica alle 04:35, 10:35, 16:35, 22:35 UTC
+    - cron: '35 4,10,16,22 * * *'
+  workflow_dispatch: # Consente l'avvio manuale tramite pulsante su GitHub
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          pip install requests pandas numpy
+
+      - name: Fetch Latest Model Run
+        run: |
+          python fetcher.py
+
+      - name: Commit and Push Updated Data
+        run: |
+          git config --global user.name "MeteoMind-Bot"
+          git config --global user.email "bot@meteomind.local"
+          git add runs_history.json
+          git commit -m "Auto-update model run snapshot [skip ci]" || echo "Nessun dato nuovo da aggiornare"
+          git push
+          
