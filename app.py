@@ -69,7 +69,7 @@ def extract_chronological_features(df, delta_df):
                 "lr": float(lr)
             })
 
-    # 2. Rilevamento Segnali di Föhn (Aria secca con crollo Dew Point sotto 10°C)
+    # 2. Rilevamento Segnali di Fohn (Aria secca con crollo Dew Point sotto 10 C)
     for t in df.index:
         dp_val = df.loc[t, "dewpoint"]
         t2m_val = df.loc[t, "t2m"]
@@ -108,37 +108,37 @@ def build_dynamic_expert_analysis(tab_name, feat, horizon_mode):
         drop_txt = ""
         if feat["thermal_drops"]:
             d = feat["thermal_drops"][0]
-            drop_txt = f"\n* 📉 **Firma del Fronte Freddo:** Registrato un crollo termico marcato a 850 hPa di **{d['drop_val']:.1f}°C in 24h** attorno a **{d['time']}**, che identifica l'irruzione della massa d'aria polare-marittima."
+            drop_txt = f"\n* 📉 **Firma del Fronte Freddo:** Registrato un crollo termico marcato a 850 hPa di **{d['drop_val']:.1f} °C in 24h** attorno a **{d['time']}**, che identifica l'irruzione della massa d'aria polare-marittima."
 
         return (
             f"### 🔬 Diagnosi Termodinamica & Profilo Verticale ({horizon_mode})\n"
             f"* ⏱️ **Intervallo Esaminato:** Da {feat['start_time']} a {feat['end_time']}.\n"
-            f"* 🌡️ **Escursione Termica a 850 hPa (~1500m):** Picco massimo di **+{feat['t850_max']:.1f}°C** ({feat['t850_max_time']}) che scende fino a un minimo di **+{feat['t850_min']:.1f}°C** ({feat['t850_min_time']}).\n"
-            f"* ❄️ **Minimo Termico in Quota (500 hPa / ~5500m):** Il termometro in media troposfera sprofonda a **{feat['t500_min']:.1f}°C** ({feat['t500_min_time']}).\n"
-            f"* ⚡ **Picco del Lapse Rate ($\Delta T_{{850-500}}$):** Il gradiente termico verticale massimo tocca **{feat['max_lapse_rate']:.1f}°C** ({feat['max_lapse_rate_time']}), corrispondente a un tasso reale di **{feat['max_lapse_rate']/4:.2f}°C/km**.\n"
-            f"* 🔎 **Lettura Fisica da Stormchaser:** Un gradiente termico verticale superiore a $7.0^\circ\\text{{C/km}}$ indica che l'aria fredda atlantica in quota scivola sopra lo strato limite padano caldo. "
+            f"* 🌡️ **Escursione Termica a 850 hPa (~1500m):** Picco massimo di **+{feat['t850_max']:.1f} °C** ({feat['t850_max_time']}) che scende fino a un minimo di **+{feat['t850_min']:.1f} °C** ({feat['t850_min_time']}).\n"
+            f"* ❄️ **Minimo Termico in Quota (500 hPa / ~5500m):** Il termometro in media troposfera sprofonda a **{feat['t500_min']:.1f} °C** ({feat['t500_min_time']}).\n"
+            f"* ⚡ **Picco del Lapse Rate (Delta T 850-500):** Il gradiente termico verticale massimo tocca **{feat['max_lapse_rate']:.1f} °C** ({feat['max_lapse_rate_time']}), corrispondente a un tasso reale di **{feat['max_lapse_rate']/4:.2f} °C/km**.\n"
+            f"* 🔎 **Lettura Fisica da Stormchaser:** Un gradiente termico verticale superiore a 7.0 °C/km indica che l'aria fredda atlantica in quota scivola sopra lo strato limite padano caldo. "
             f"La colonna d'aria si trova in uno stato di **instabilità super-adiabatica condizionale**: qualsiasi sollevamento forzato dal suolo trasforma l'energia latente in violenta accelerazione ascensionale.{drop_txt}"
         )
 
     elif tab_name == "cape":
         w_max = np.sqrt(2 * feat["max_cape"]) if feat["max_cape"] > 0 else 0
         lcl = max(200, 125 * (feat["t2m_max"] - feat["max_dp"]))
-        
+
         overlap_txt = "Nessuna sovrapposizione critica tra CAPE estremo e forte shear nell'orizzonte selezionato."
         if feat["supercell_overlap_windows"]:
             w = feat["supercell_overlap_windows"][0]
-            overlap_txt = f"⚠️ **Finestra di Rischio Supercellare Rilevata a {w['time']}:** CAPE di picco a **{w['cape']:.0f} J/kg** concomitante con Deep-Layer Shear a **{w['dls']:.0f} nodi** e Lapse Rate di **{w['lr']:.1f}°C**."
+            overlap_txt = f"⚠️ **Finestra di Rischio Supercellare Rilevata a {w['time']}:** CAPE di picco a **{w['cape']:.0f} J/kg** concomitante con Deep-Layer Shear a **{w['dls']:.0f} nodi** e Lapse Rate di **{w['lr']:.1f} °C**."
 
         foehn_txt = ""
         if feat["foehn_signals"]:
-            foehn_txt = f"\n* 🏜️ **Segnale di Föhn / Aria Secca:** Individuato un crollo del Dew Point al suolo a **{feat['min_dp']:.1f}°C** ({feat['foehn_signals'][0]}). Indica correnti di caduta da Nord/Nord-Ovest che comprimono e asciugano l'aria, sterilizzando temporaneamente l'instabilità convettiva."
+            foehn_txt = f"\n* 🏜️ **Segnale di Föhn / Aria Secca:** Individuato un crollo del Dew Point al suolo a **{feat['min_dp']:.1f} °C** ({feat['foehn_signals'][0]}). Indica correnti di caduta da Nord/Nord-Ovest che comprimono e asciugano l'aria, sterilizzando temporaneamente l'instabilità convettiva."
 
         return (
             f"### ⚡ Diagnosi Carburante Convettivo & Dinamica dell'Updraft ({horizon_mode})\n"
             f"* 💥 **Picco di Energia CAPE:** Raggiunge **{feat['max_cape']:.0f} J/kg** ({feat['max_cape_time']}).\n"
-            f"* 🚀 **Velocità Ascensionale Massima ($w_{{max}} = \\sqrt{{2 \\cdot \\text{{CAPE}}}}$):** L'aria all'interno dell'updraft può accelerare teoricamente fino a **{w_max:.1f} m/s ({w_max*3.6:.0f} km/h)**. Valori oltre i 40–50 m/s sostengono idrometeore congelate pesanti, innescando **grandinate con chicchi di diametro $>3\text{–}5\text{ cm}$**.\n"
-            f"* 💧 **Umidità nei Bassi Strati (Dew Point $T_d$):** Picco di rugiada a **{feat['max_dp']:.1f}°C** ({feat['max_dp_time']}). Valori $\ge 19\text{–}21^\circ\text{C}$ indicano che la Valle Olona è carica di vapore d'acqua.\n"
-            f"* ☁️ **Quota Base Nubi (LCL):** Stimata a circa **{lcl:.0f} metri** durante le ore più calde. Una base nube bassa (<1000m) riduce l'evaporazione sotto la nube e sostiene forti rotazioni nei bassi strati.\n"
+            f"* 🚀 **Velocità Ascensionale Massima (w_max = sqrt(2 * CAPE)):** L'aria all'interno dell'updraft può accelerare teoricamente fino a **{w_max:.1f} m/s ({w_max*3.6:.0f} km/h)**. Valori oltre i 40-50 m/s sostengono idrometeore congelate pesanti, innescando **grandinate con chicchi di diametro > 3-5 cm**.\n"
+            f"* 💧 **Umidità nei Bassi Strati (Dew Point Td):** Picco di rugiada a **{feat['max_dp']:.1f} °C** ({feat['max_dp_time']}). Valori >= 19-21 °C indicano che la Valle Olona è carica di vapore d'acqua.\n"
+            f"* ☁️ **Quota Base Nubi (LCL):** Stimata a circa **{lcl:.0f} metri** durante le ore più calde. Una base nube bassa (< 1000m) riduce l'evaporazione sotto la nube e sostiene forti rotazioni nei bassi strati.\n"
             f"* 🎯 **Sintesi Instabilità:** {overlap_txt}{foehn_txt}"
         )
 
@@ -147,36 +147,36 @@ def build_dynamic_expert_analysis(tab_name, feat, horizon_mode):
             f"### 🌧️ Diagnosi Precipitazioni, Downdraft & Cold Pool ({horizon_mode})\n"
             f"* 🌊 **Picco di Intensità Oraria:** Previsti fino a **{feat['max_rain']:.1f} mm/h** ({feat['max_rain_time']}).\n"
             f"* 📊 **Accumulo Cumulato Totale:** Raggiunge i **{feat['total_accum']:.1f} mm** sull'intero periodo.\n"
-            f"* 🌪️ **Microfisica delle Correnti Discendenti (Downdraft):** L'evaporazione parziale della pioggia e della grandine negli strati intermedi (*evaporative cooling*) genera aria fredda e densa che precipita al suolo.\n"
-            f"* ⚠️ **Rischio Downburst su Olgiate Olona:** L'impatto della sacca fredda (*cold pool*) contro la pianura riscaldata genera raffiche orizzontali lineari di **downburst oltre gli 80–100 km/h**. L'avanzamento del fronte freddo al suolo (*outflow boundary*) funge da cuneo che solleva nuova aria umida, innescando celle convettive a catena verso Busto Arsizio e Legnano."
+            f"* 🌪️ **Microfisica delle Correnti Discendenti (Downdraft):** L'evaporazione parziale della pioggia e della grandine negli strati intermedi (evaporative cooling) genera aria fredda e densa che precipita al suolo.\n"
+            f"* ⚠️ **Rischio Downburst su Olgiate Olona:** L'impatto della sacca fredda (cold pool) contro la pianura riscaldata genera raffiche orizzontali lineari di **downburst oltre gli 80-100 km/h**. L'avanzamento del fronte freddo al suolo (outflow boundary) funge da cuneo che solleva nuova aria umida, innescando celle convettive a catena verso Busto Arsizio e Legnano."
         )
 
     elif tab_name == "shear":
         structure = "Supercella Mesociclonica" if feat["max_dls"] >= 35 else ("Multicella / Squall Line Organizzata" if feat["max_dls"] >= 20 else "Temporale a Cella Singola (Pulse Storm)")
         return (
             f"### 💨 Diagnosi Cinematica: Wind Shear & Struttura dei Temporali ({horizon_mode})\n"
-            f"* 🌀 **Picco di Deep-Layer Shear ($DLS_{{0-6\\text{{km}}}}$):** Differenziale di vento tra suolo (10m) e quota (5500m) pari a **{feat['max_dls']:.0f} nodi (kts)** ({feat['max_dls_time']}).\n"
+            f"* 🌀 **Picco di Deep-Layer Shear (DLS 0-6km):** Differenziale di vento tra suolo (10m) e quota (5500m) pari a **{feat['max_dls']:.0f} nodi (kts)** ({feat['max_dls_time']}).\n"
             f"* 📐 **Morfologia Convettiva Attesa:** In base al valore di picco, la struttura dominante stimata è: **{structure}**.\n"
-            f"* ⚙️ **Meccanismo di Auto-Sostentamento:** Uno shear $\ge 35\text{ kts}$ inclina l'asse dell'updraft. La pioggia e la grandine cadono a valle senza soffocare la corrente ascensionale, consentendo alla cella di rigenerarsi per diverse ore.\n"
-            f"* 🏔️ **Forzante Orografica del Campo dei Fiori:** A Olgiate Olona, l'aria calda da Sud-Est converge verso nord contro i primi rilievi prealpini. L'elicità atmosferica (*Storm-Relative Helicity*) inietta rotazione nell'updraft, creando le condizioni ideali per **supercelle grandinigene con moti rotatori** in discesa verso l'alto Milanese."
+            f"* ⚙️ **Meccanismo di Auto-Sostentamento:** Uno shear >= 35 kts inclina l'asse dell'updraft. La pioggia e la grandine cadono a valle senza soffocare la corrente ascensionale, consentendo alla cella di rigenerarsi per diverse ore.\n"
+            f"* 🏔️ **Forzante Orografica del Campo dei Fiori:** A Olgiate Olona, l'aria calda da Sud-Est converge verso nord contro i primi rilievi prealpini. L'elicità atmosferica (Storm-Relative Helicity) inietta rotazione nell'updraft, creando le condizioni ideali per **supercelle grandinigene con moti rotatori** in discesa verso l'alto Milanese."
         )
 
     elif tab_name == "delta":
         delta_val = feat.get("delta_t850_mean", 0.0)
         max_pos = feat.get("delta_t850_max_pos", 0.0)
         max_neg = feat.get("delta_t850_max_neg", 0.0)
-        
+
         if delta_val >= 1.2 or max_pos >= 2.5:
-            synop_trend = f"🔴 **Trend in Riscaldamento / Rallentamento della Saccatura (Picco variazione +{max_pos:.1f}°C):** Il run attuale ritarda l'affondo perturbato. Si profila una **falla iberica** (sprofondamento occidentale) che attiva un richiamo sciroccale molto caldo, prolungando l'accumulo di calore sensibile sulla pianura lombarda."
+            synop_trend = f"🔴 **Trend in Riscaldamento / Rallentamento della Saccatura (Picco variazione +{max_pos:.1f} °C):** Il run attuale ritarda l'affondo perturbato. Si profila una **falla iberica** (sprofondamento occidentale) che attiva un richiamo sciroccale molto caldo, prolungando l'accumulo di calore sensibile sulla pianura lombarda."
         elif delta_val <= -1.2 or max_neg <= -2.5:
-            synop_trend = f"🔵 **Trend in Raffreddamento / Anticipo del Fronte (Picco variazione {max_neg:.1f}°C):** Il modello velocizza l'ingresso della goccia fredda sul Nord-Ovest, anticipando l'innesco dei primi temporali frontali."
+            synop_trend = f"🔵 **Trend in Raffreddamento / Anticipo del Fronte (Picco variazione {max_neg:.1f} °C):** Il modello velocizza l'ingresso della goccia fredda sul Nord-Ovest, anticipando l'innesco dei primi temporali frontali."
         else:
-            synop_trend = f"⚪ **Assetto Sinottico Confermato (Variazione media {delta_val:+.1f}°C):** Elevata stabilità probabilistica e allineamento tra i cluster ensemble."
+            synop_trend = f"⚪ **Assetto Sinottico Confermato (Variazione media {delta_val:+.1f} °C):** Elevata stabilità probabilistica e allineamento tra i cluster ensemble."
 
         return (
             f"### 📊 Diagnosi Deriva Modellistica & Onde di Rossby ({horizon_mode})\n"
             f"* 🔄 **Comportamento Run-to-Run:** {synop_trend}\n"
-            f"* 🛰️ **Analisi della Dispersione:** Nel breve termine (3 giorni) la traiettoria è ad alta precisione; oltre i 7–10 giorni le oscillazioni delle barre rosse e blu evidenziano la sensibilità caotica alle condizioni iniziali delle onde planetarie di Rossby."
+            f"* 🛰️ **Analisi della Dispersione:** Nel breve termine (3 giorni) la traiettoria è ad alta precisione; oltre i 7-10 giorni le oscillazioni delle barre rosse e blu evidenziano la sensibilità caotica alle condizioni iniziali delle onde planetarie di Rossby."
         )
 
 @st.cache_data(show_spinner=False)
@@ -196,15 +196,15 @@ def get_advanced_meteomind_briefing(tab_name, target_id, base_id, horizon_mode, 
         import google.generativeai as genai
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel("gemini-2.0-flash")
-        
+
         prompt = f"""
-Sei 'MeteoMind', meteorologo senior e stormchaser di altissimo livello specializzato nella dinamica dei temporali severi nel Nord Italia (Olgiate Olona, Valle Olona, fascia pedemontana del Campo dei Fiori).
+Sei MeteoMind, meteorologo senior e stormchaser di altissimo livello specializzato nella dinamica dei temporali severi nel Nord Italia (Olgiate Olona, Valle Olona, fascia pedemontana del Campo dei Fiori).
 Analizza i DATI REALI ed ESTRAI I DETTAGLI CRONOLOGICI SPECIFICI per la scheda '{tab_name}' sull'orizzonte '{horizon_mode}'.
 
 NON FARE DEFINIZIONI GENERICHE DA DIZIONARIO. Devi commentare esattamente le date, le ore, i picchi e le firme atmosferiche presenti in questi dati:
 {feat_json_str}
 
-Spiega la fisica reale che accade nell'aria sopra Olgiate Olona, chiarendo termini complessi (Lapse Rate, CAPE, Dew Point, LCL, Downdraft, Downburst, Deep-Layer Shear, Supercella, Falla Iberica, Föhn) in relazione a queste specifiche cifre e date.
+Spiega la fisica reale che accade nell'aria sopra Olgiate Olona, chiarendo termini complessi (Lapse Rate, CAPE, Dew Point, LCL, Downdraft, Downburst, Deep-Layer Shear, Supercella, Falla Iberica, Fohn) in relazione a queste specifiche cifre e date.
 """
         response = model.generate_content(prompt)
         return response.text
@@ -299,7 +299,7 @@ with tab1:
     fig_t.add_trace(go.Scatter(x=df_target.index, y=df_target["t2m"], name="T2m (Suolo)", line=dict(color="#ffa31a", width=1.5, dash="dot")))
     fig_t.update_layout(title=f"Profilo Termico Multi-Livello [{horizon_mode}]", template="plotly_dark", hovermode="x unified")
     st.plotly_chart(fig_t, use_container_width=True)
-    
+
     st.markdown("#### 🧭 La Diagnosi del Meteorologo (Termodinamica & Quota)")
     st.info(get_advanced_meteomind_briefing("thermo", target_id, base_id, horizon_mode, feat_json))
 
@@ -315,7 +315,7 @@ with tab2:
         yaxis2=dict(title="Punto di Rugiada (°C)", overlaying="y", side="right")
     )
     st.plotly_chart(fig_c, use_container_width=True)
-    
+
     st.markdown("#### 🧭 La Diagnosi del Meteorologo (Carburante & Updraft)")
     st.info(get_advanced_meteomind_briefing("cape", target_id, base_id, horizon_mode, feat_json))
 
@@ -331,7 +331,7 @@ with tab3:
         yaxis2=dict(title="Accumulo Cumulato (mm)", overlaying="y", side="right")
     )
     st.plotly_chart(fig_p, use_container_width=True)
-    
+
     st.markdown("#### 🧭 La Diagnosi del Meteorologo (Microfisica & Downdrafts)")
     st.info(get_advanced_meteomind_briefing("rain", target_id, base_id, horizon_mode, feat_json))
 
@@ -339,4 +339,5 @@ with tab4:
     fig_w = go.Figure()
     fig_w.add_trace(go.Scatter(x=df_target.index, y=df_target["dls_knots"], name="Deep-Layer Shear 0-6km (kts)", line=dict(color="#ff9933", width=2.5)))
     fig_w.add_hline(y=35, line_dash="dash", line_color="red", annotation_text="Soglia Supercellare (>35 kts)")
-    fig_w.add_hline(y
+    fig_w.add_hline(y=20, line_dash="dot", line_color="yellow", annotation_text="Soglia Multicellare (>20 kts)")
+    fig_w.update_layout(title=f"Cinematica: Deep-Layer
