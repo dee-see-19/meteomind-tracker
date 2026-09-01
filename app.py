@@ -3,16 +3,16 @@ import plotly.graph_objects as go
 import pandas as pd
 import json
 import os
-from analytics import compute_run_delta, generate_deep_meteorological_analysis
+from analytics import compute_run_delta, get_ai_stormchaser_briefing
 
 st.set_page_config(page_title="MeteoMind Stormchaser Lab", layout="wide")
 
-st.title("⚡ MeteoMind: Synoptic Intelligence & 14-Day Trend Engine")
-st.caption("Coordinate: Olgiate Olona (45.64°N, 8.88°E) | Monitoraggio Convezione & Microclima Pedemontano")
+st.title("⚡ MeteoMind: AI Synoptic Intelligence & Severe Weather Desk")
+st.caption("Coordinate Target: Olgiate Olona (45.64°N, 8.88°E) | Copilota Meteorologico di Mesoscala")
 
 DATA_FILE = "runs_history.json"
 if not os.path.exists(DATA_FILE):
-    st.info("In attesa del primo salvataggio dati. Esegui la GitHub Action per estrarre l'archivio.")
+    st.info("In attesa del primo salvataggio dati. Esegui la GitHub Action per popolare il database.")
     st.stop()
 
 with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -23,18 +23,17 @@ if not run_keys:
     st.warning("Database vuoto.")
     st.stop()
 
-# CONTROLLI SUPERIORI
 c_r1, c_r2, c_r3 = st.columns([2, 2, 3])
 with c_r1:
     target_id = st.selectbox("🎯 Run Attivo (TARGET):", run_keys, index=0)
 with c_r2:
     base_idx = 1 if len(run_keys) > 1 else 0
-    base_id = st.selectbox("⚖️ Run di Riferimento (BASE):", run_keys, index=base_idx)
+    base_id = st.selectbox("⚖️ Run di Confronto (BASE):", run_keys, index=base_idx)
 with c_r3:
     horizon_mode = st.radio(
         "🔭 Orizzonte Temporale:",
         ["3 Giorni (Nowcasting)", "7 Giorni (Medio Raggio)", "14 Giorni (Trend Ensemble)"],
-        index=2,
+        index=1,
         horizontal=True
     )
 
@@ -43,7 +42,6 @@ horizon_hours = 72 if "3" in horizon_mode else (168 if "7" in horizon_mode else 
 t_data = history[target_id]
 b_data = history[base_id]
 
-# Parsing e creazione DataFrame completi
 df_target_full = pd.DataFrame({
     "time": pd.to_datetime(t_data["times"]),
     "t850": t_data["t850_mean"],
@@ -65,37 +63,42 @@ df_base_full = pd.DataFrame({
     "precip": b_data["precip_mean"]
 }).set_index("time")
 
-# Applicazione filtro orizzonte
 limit_time = df_target_full.index[0] + pd.Timedelta(hours=horizon_hours)
 df_target = df_target_full[df_target_full.index <= limit_time]
 df_base = df_base_full[df_base_full.index <= limit_time]
 
 delta_df = compute_run_delta(df_base, df_target)
 
-# Generazione Analisi Meteorologica Dinamica
-synoptic_briefing, events, thermo_guide, cape_guide = generate_deep_meteorological_analysis(df_target, delta_df, horizon_hours)
+# Preparazione sintesi fisica per l'AI
+lapse_rate = df_target["t850"] - df_target["t500"]
+stats_summary = {
+    "t850_max": float(df_target["t850"].max()),
+    "t850_min": float(df_target["t850"].min()),
+    "t500_min": float(df_target["t500"].min()),
+    "max_lapse_rate_850_500": float(lapse_rate.max()),
+    "max_lapse_rate_time": lapse_rate.idxmax().strftime("%Y-%m-%d %H:%M UTC"),
+    "max_cape_ensemble": float(df_target["cape_max"].max()),
+    "max_cape_time": df_target["cape_max"].idxmax().strftime("%Y-%m-%d %H:%M UTC"),
+    "max_dewpoint": float(df_target["dewpoint"].max()),
+    "max_rain_rate": float(df_target["precip"].max()),
+    "max_dls_knots": float(df_target["dls_knots"].max()),
+    "delta_t850_trend": float(delta_df["delta_t850"].iloc[min(len(delta_df)-1, int(horizon_hours/2))]) if not delta_df.empty else 0.0
+}
+
+# SEZIONE: IL METEOROLOGO PERSONALE AI (IL BOX BLU DINAMICO)
+st.markdown("---")
+st.subheader("🤖 MeteoMind AI: Analisi Sinottica & Diagnosi di Mesoscala")
+
+with st.spinner("MeteoMind sta analizzando le carte isobariche e i profili termodinamici per Olgiate Olona..."):
+    ai_briefing = get_ai_stormchaser_briefing(
+        target_id, base_id, horizon_mode, json.dumps(stats_summary, indent=2)
+    )
+
+st.info(ai_briefing)
 
 st.markdown("---")
-st.subheader(f"🧭 Bollettino Operativo Stormchaser: Olgiate Olona [{horizon_mode}]")
-st.info(synoptic_briefing)
 
-if events:
-    st.markdown("#### ⚠️ Finestre di Rischio Convezione Rilevate")
-    for ev in events:
-        with st.expander(f"{ev['mode']} ➔ {ev['time_str']}"):
-            st.markdown(ev["detail"])
-            c1, c2, c3, c4, c5 = st.columns(5)
-            c1.metric("ΔT (850-500)", f"{ev['lr']:.1f} °C")
-            c2.metric("CAPE Max", f"{ev['cape']:.0f} J/kg")
-            c3.metric("Updraft Max", f"{ev['w_max']:.0f} m/s")
-            c4.metric("DLS (0-6km)", f"{ev['dls']:.0f} kts")
-            c5.metric("Base Nubi (LCL)", f"{ev['lcl']:.0f} m")
-else:
-    st.success("✅ Nessun innesco convettivo severo rilevato nell'orizzonte selezionato.")
-
-st.markdown("---")
-
-# SCHEDE GRAFICHE INTERATTIVE
+# SCHEDE GRAFICHE
 tab1, tab2, tab3 = st.tabs([
     f"📈 Profilo Termico Multi-Livello ({horizon_mode})",
     f"⚡ Energia CAPE & Dew Point ({horizon_mode})",
@@ -109,7 +112,6 @@ with tab1:
     fig_t.add_trace(go.Scatter(x=df_target.index, y=df_target["t2m"], name="T2m (Suolo)", line=dict(color="#ffa31a", width=1.5, dash="dot")))
     fig_t.update_layout(title=f"Evoluzione Termica Multi-Livello su Olgiate Olona [{horizon_mode}]", template="plotly_dark", hovermode="x unified")
     st.plotly_chart(fig_t, use_container_width=True)
-    st.info(thermo_guide)
 
 with tab2:
     fig_c = go.Figure()
@@ -123,7 +125,6 @@ with tab2:
         yaxis2=dict(title="Punto di Rugiada (°C)", overlaying="y", side="right")
     )
     st.plotly_chart(fig_c, use_container_width=True)
-    st.info(cape_guide)
 
 with tab3:
     fig_d = go.Figure()
@@ -133,4 +134,3 @@ with tab3:
     fig_d.add_trace(go.Bar(x=common, y=delta_sub["delta_t850"], marker_color=colors, name="Δ T850"))
     fig_d.update_layout(title=f"Deriva Termica Netta a 850 hPa (Target vs Base) [{horizon_mode}]", template="plotly_dark", hovermode="x unified")
     st.plotly_chart(fig_d, use_container_width=True)
-    
