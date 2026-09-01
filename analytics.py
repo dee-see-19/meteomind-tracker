@@ -1,5 +1,9 @@
+import os
+import json
 import pandas as pd
 import numpy as np
+import google.generativeai as genai
+import streamlit as st
 
 def compute_run_delta(df_base, df_target):
     common = df_base.index.intersection(df_target.index)
@@ -12,80 +16,43 @@ def compute_run_delta(df_base, df_target):
     delta["delta_precip"] = df_t["precip"] - df_b["precip"]
     return delta
 
-def generate_deep_meteorological_analysis(df_target, delta_df, horizon_hours):
+@st.cache_data(show_spinner=False)
+def get_ai_stormchaser_briefing(target_id, base_id, horizon_mode, stats_summary_json):
     """
-    Motore analitico avanzato: compila un bollettino quantitativo
-    sul microclima di Olgiate Olona e della Pedemontana Varesina.
+    Interroga il modello LLM Gemini per generare un bollettino ultra-dettagliato
+    tarato sul microclima di Olgiate Olona, memorizzandolo in cache per ogni run.
     """
-    lapse_rate = df_target["t850"] - df_target["t500"]
-    spread_depr = df_target["t2m"] - df_target["dewpoint"]
-    lcl_height_m = (125 * spread_depr).clip(lower=200)
-    w_max_series = np.sqrt(2 * df_target["cape_max"].clip(lower=0))
-    
-    check_idx = min(len(delta_df) - 1, int(horizon_hours / 2))
-    delta_val = delta_df["delta_t850"].iloc[check_idx] if not delta_df.empty else 0
-    
-    if delta_val >= 1.5:
-        synoptic_briefing = (
-            f"🔴 **DERIVA IN RISCALDAMENTO / RITARDATA EVOLUZIONE (+{delta_val:.1f}°C a medio termine):** "
-            "I cluster frenano l'avanzata della saccatura atlantica. Rischio di affondo troppo occidentale "
-            "('falla iberica') con richiamo sciroccale caldo: aumenta l'accumulo di umidità nei bassi strati lungo la Valle Olona."
-        )
-    elif delta_val <= -1.5:
-        synoptic_briefing = (
-            f"🔵 **DERIVA IN RAFFREDDAMENTO / ANTICIPO DEL FRONTE ({delta_val:.1f}°C a medio termine):** "
-            "I cluster accelerano l'ingresso dell'asse di saccatura. L'irruzione fredda a 500 hPa impatterà le Prealpi occidentali in anticipo."
-        )
-    else:
-        synoptic_briefing = (
-            f"⚪ **ASSETTO SINOTTICO CONSOLIDATO ({delta_val:+.1f}°C):** "
-            "I membri ensemble mantengono elevata coerenza di traiettoria rispetto all'uscita precedente."
+    api_key = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY"))
+    if not api_key:
+        return "⚠️ **API Key non configurata.** Inserisci `GEMINI_API_KEY` nei Secrets di Streamlit per attivare l'assistente AI live."
+
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel("gemini-2.0-flash")
+
+        system_instruction = (
+            "Sei 'MeteoMind', un meteorologo senior e stormchaser di altissimo livello specializzato nella dinamica "
+            "dei temporali severi (supercelle, squall line, tornado, grandine gigante) e nel microclima del Nord Italia "
+            "(in particolare la pianura lombarda, la Valle Olona e la pedemontana del Campo dei Fiori / Olgiate Olona). "
+            "Il tuo stile è autorevole, appassionato, scientificamente rigoroso e con occhio clinico da cacciatore di temporali. "
+            "Analizza i dati del modello meteo forniti ed elabora una diagnosi approfondita strutturata in 3 punti: "
+            "1. Assetto Sinottico & Deriva del Modello (analisi run-to-run, asse delle saccature, rischio falla iberica o blocco anticiclonico). "
+            "2. Termodinamica & Carburante Convettivo (Lapse Rate 850-500, CAPE max, Dew Point a terra, velocità stimata updraft w_max, quota base nubi LCL). "
+            "3. Focus Microclima & Rischio Severe Weather su Olgiate Olona (interazione con il massiccio del Campo dei Fiori, richiamo sciroccale padano, shear 0-6km e tipo di struttura convettiva attesa)."
         )
 
-    events = []
-    for t in df_target.index:
-        lr = lapse_rate.loc[t]
-        cape = df_target.loc[t, "cape_max"]
-        dp = df_target.loc[t, "dewpoint"]
-        t2m = df_target.loc[t, "t2m"]
-        rain = df_target.loc[t, "precip"]
-        dls = df_target.loc[t, "dls_knots"]
-        w_max = w_max_series.loc[t]
-        lcl = lcl_height_m.loc[t]
-        
-        if lr >= 27.5 and (cape >= 1000 or rain >= 1.0):
-            if cape >= 2200 and dls >= 35:
-                mode = "🔴 **RISCHIO SEVERO: Possibile Supercella Isolata / Grandine Grossa (>3-5 cm)**"
-                detail = (
-                    f"Forte instabilità ($w_{{max}} \\approx {w_max:.0f}\\text{{ m/s}}$) con DLS sostenuto ({dls:.0f} kts). "
-                    f"Base nube bassa ($LCL \\approx {lcl:.0f}\\text{{ m}}$). Forzante orografica ideale contro il Campo dei Fiori."
-                )
-            elif dls >= 25 or rain >= 3.0:
-                mode = "🟠 **RISCHIO ELEVATO: Sistema Multicellare / Squall Line con Raffiche Lineari**"
-                detail = f"Shear moderato ({dls:.0f} kts) con forte instabilità. Rischio downburst e grandine media."
-            else:
-                mode = "🟡 **RISCHIO MODERATO: Temporali Termoconvettivi o di Sbarramento**"
-                detail = f"Convezione a prevalente forzante orografica o termica ($w_{{max}} \\approx {w_max:.0f}\\text{{ m/s}}$)."
-                
-            events.append({
-                "time_str": t.strftime("%A %d/%m ore %H:%M UTC"),
-                "mode": mode, "detail": detail,
-                "lr": lr, "cape": cape, "dp": dp, "t2m": t2m,
-                "dls": dls, "w_max": w_max, "lcl": lcl, "rain": rain
-            })
-            
-    max_lr_val = lapse_rate.max()
-    max_cape_val = df_target["cape_max"].max()
-    
-    thermo_guide = (
-        f"**Diagnosi Termodinamica:** Massimo Lapse Rate $\Delta T_{{850-500}}$ a **{max_lr_val:.1f}°C** "
-        f"($\\Gamma \\approx {max_lr_val/4:.2f}^\\circ\\text{{C/km}}$). "
-        + ("Gradiente ripido: forte potenziale esplosivo." if max_lr_val >= 28.5 else "Gradiente nei ranghi.")
-    )
-    cape_guide = (
-        f"**Diagnosi Carburante Convettivo:** Picco CAPE massimo a **{max_cape_val:.0f} J/kg** "
-        f"($w_{{max}} \\approx {np.sqrt(2*max_cape_val):.0f}\\text{{ m/s}}$). "
-        + ("Energia elevata con rischio severo." if max_cape_val >= 2000 else "Energia moderata o ordinaria.")
-    )
-    
-    return synoptic_briefing, events, thermo_guide, cape_guide
+        prompt = f"""
+{system_instruction}
+
+Dati operativi del run attivo:
+- Run Target: {target_id} | Run Base di confronto: {base_id}
+- Orizzonte temporale visualizzato: {horizon_mode}
+- Metriche quantitative rilevate:
+{stats_summary_json}
+
+Genera un'analisi ricca, dettagliata e scorrevole in formato Markdown per il bollettino operativo della dashboard.
+"""
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"⚠️ Errore durante la generazione del bollettino AI: {str(e)}"
