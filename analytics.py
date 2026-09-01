@@ -13,72 +13,120 @@ def compute_run_delta(df_base, df_target):
     delta_df["delta_precip"] = df_t["precip"] - df_b["precip"]
     return delta_df
 
-def generate_stormchaser_briefing(df_target, delta_df, target_id, base_id):
+def generate_dynamic_explanations(df_target, delta_df):
     """
-    Genera un'analisi dettagliata da Stormchaser tarata sul microclima di Olgiate Olona.
+    Analizza i valori quantitativi del run attivo e genera spiegazioni
+    didattiche dinamiche per ciascuna sezione e grafico.
     """
-    horizon_idx = min(168, len(df_target) - 1)
-    target_7d = df_target["t850"].iloc[horizon_idx]
-    delta_7d = delta_df["delta_t850"].iloc[min(horizon_idx, len(delta_df)-1)]
-    target_std = df_target["t850_std"].iloc[horizon_idx]
+    # 1. Analisi Lapse Rate e Profilo Termico
+    lapse_rate = df_target["t850"] - df_target["t500"]
+    max_lr = lapse_rate.max()
+    max_lr_time = lapse_rate.idxmax()
+    t850_at_max = df_target.loc[max_lr_time, "t850"]
+    t500_at_max = df_target.loc[max_lr_time, "t500"]
     
-    # 1. Analisi Trend Sinottico
-    if delta_7d >= 1.5:
-        synoptic_summary = (
-            f"**Trend in Riscaldamento / Rallentamento Fronte (+{delta_7d:.1f}°C a 7d):** "
-            "I cluster stanno ritardando l'ingresso della saccatura atlantica. "
-            "Possibile sprofondamento occidentale ('falla iberica') che attiva un richiamo caldo prefrontale "
-            "africano, accumulando ulteriore umidità nei bassi strati lungo la Valle Olona."
+    if max_lr >= 30.0:
+        thermo_exp = (
+            f"🔥 **Gradiente Termico Verticale Estremo ($\Delta T = {max_lr:.1f}^\circ\\text{{C}}$ atteso il {max_lr_time.strftime('%d/%m ore %H:%M UTC')}):** "
+            f"A circa 1500m abbiamo un'isoterma di **{t850_at_max:.1f}°C**, mentre a 5500m entra aria fredda a **{t500_at_max:.1f}°C**. "
+            "Il lapse rate supera i $7.5^\circ\\text{C/km}$: la colonna d'aria è un detonatore. "
+            "Ogni bolla d'aria che supera il LFC (Livello di Libera Convezione) accelererà verso l'alto con violenza, favorendo nubi a sviluppo verticale esplosivo."
         )
-    elif delta_7d <= -1.5:
-        synoptic_summary = (
-            f"**Trend in Raffreddamento / Anticipo Fronte ({delta_7d:.1f}°C a 7d):** "
-            "I cluster accelerano la progressione del cavo d'onda atlantico. "
-            "L'irruzione fredda in quota viene vista impattare più rapidamente contro le Alpi occidentali."
+    elif max_lr >= 27.5:
+        thermo_exp = (
+            f"⚡ **Gradiente Instabile Moderato ($\Delta T = {max_lr:.1f}^\circ\\text{{C}}$ il {max_lr_time.strftime('%d/%m ore %H:%M')}):** "
+            f"Isoterma 500 hPa a **{t500_at_max:.1f}°C** sopra una 850 hPa a **{t850_at_max:.1f}°C**. "
+            "Condizioni ideali per convezione organizzata (multicelle o squall line) se supportata da forzante orografica o convergenza nei bassi strati."
         )
     else:
-        synoptic_summary = (
-            f"**Assetto Sinottico Confermato ({delta_7d:+.1f}°C a 7d):** "
-            "Elevata coerenza tra le ultime emissioni. La traiettoria del flusso perturbato è stabile."
+        thermo_exp = (
+            f"🟢 **Profilo Termico Stabile o Poco Instabile (Max $\Delta T = {max_lr:.1f}^\circ\\text{{C}}$):** "
+            "Il gradiente verticale non evidenzia anomalie fredde marcate in quota. Rischio grandinigeno basso, possibili solo rovesci ordinari o piogge da sbarramento."
         )
 
-    # 2. Scansione Eventi di Instabilità
-    lapse_rate = df_target["t850"] - df_target["t500"]
-    severe_windows = []
+    # 2. Analisi CAPE e Dew Point (Carburante Convettivo)
+    max_cape = df_target["cape_max"].max()
+    max_cape_time = df_target["cape_max"].idxmax()
+    dp_at_max = df_target.loc[max_cape_time, "dewpoint"]
+    w_max = np.sqrt(2 * max_cape) if max_cape > 0 else 0
     
+    if max_cape >= 2500:
+        cape_exp = (
+            f"💥 **Carico Energetico Severo (Picco CAPE: {max_cape:.0f} J/kg il {max_cape_time.strftime('%d/%m ore %H:%M UTC')}):** "
+            f"Con un Dew Point a terra stimato a **{dp_at_max:.1f}°C**, l'umidità specifica nei primi 1000m della Valle Olona è altissima. "
+            f"Velocità teorica massima dell'updraft: **$w_{{max}} \\approx {w_max:.1f}\\text{{ m/s}}$ ({w_max*3.6:.0f} km/h)**. "
+            "Correnti ascensionali di questa violenza sostengono chicchi di grandine di grosse dimensioni (>4-5 cm) prima del collasso a terra."
+        )
+    elif max_cape >= 1200:
+        cape_exp = (
+            f"⚡ **Energia Convettiva Moderata (Picco CAPE: {max_cape:.0f} J/kg | Dew Point: {dp_at_max:.1f}°C):** "
+            f"Updraft teorico massimo di circa **{w_max:.1f} m/s**. Sufficiente per innescare grandinate medie e intense raffiche di downdraft lineare."
+        )
+    else:
+        cape_exp = (
+            f"💧 **Energia Bassa o Assente (Max CAPE: {max_cape:.0f} J/kg):** "
+            "Manca il carburante termodinamico nei bassi strati o l'aria è asciutta ($T_d$ basso). Possibili solo fenomeni stratiformi o convezione debole."
+        )
+
+    # 3. Analisi Delta Run-to-Run (Deriva Sinottica)
+    horizon_idx = min(168, len(delta_df) - 1)
+    delta_7d = delta_df["delta_t850"].iloc[horizon_idx]
+    
+    if delta_7d >= 1.5:
+        delta_exp = (
+            f"🔴 **Deriva in Riscaldamento (+{delta_7d:.1f}°C a +7 giorni):** "
+            "Il run attivo ha ritardato l'avanzata della saccatura. Dinamica tipica da **falla iberica**: la perturbazione affonda a ovest del Portogallo "
+            "e attiva sulla Lombardia un richiamo di Scirocco caldo e secco. Questo carica ulteriormente la molla termodinamica per i giorni successivi."
+        )
+    elif delta_7d <= -1.5:
+        delta_exp = (
+            f"🔵 **Deriva in Raffreddamento ({delta_7d:.1f}°C a +7 giorni):** "
+            "Il modello anticipa l'irruzione fredda. L'asse della saccatura entra più franco verso il Golfo del Leone: "
+            "il fronte temporalesco impatterà le Prealpi occidentali in anticipo."
+        )
+    else:
+        delta_exp = (
+            f"⚪ **Coerenza Modellistica Elevata ({delta_7d:+.1f}°C a +7 giorni):** "
+            "Nessuna oscillazione significativa rispetto al run precedente. Il timing e la traiettoria del fronte sono stabili."
+        )
+
+    # 4. Scanner Locale Microclima Olgiate Olona / Varesotto
+    local_alerts = []
     for t, lr in lapse_rate.items():
         rain = df_target.loc[t, "precip"]
-        t850 = df_target.loc[t, "t850"]
+        cape = df_target.loc[t, "cape_max"]
         t500 = df_target.loc[t, "t500"]
-        t2m = df_target.loc[t, "t2m"]
+        t850 = df_target.loc[t, "t850"]
+        dp = df_target.loc[t, "dewpoint"]
         
-        if lr >= 27.5 and rain >= 0.8:
-            if lr >= 30.5 and rain >= 3.0:
-                threat = "🔴 RISCHIO SEVERO: Possibile Innesco Supercellare / Grandine Grossa"
-                desc = (
-                    f"Gradiente termico verticale estremo ($\Delta T = {lr:.1f}^\circ\text{{C}}$) con $T_{{500}}$ a {t500:.1f}°C. "
-                    "Se al suolo insiste il richiamo da Sud-Est lungo la pianura, l'impatto contro le Prealpi Varesine "
-                    "(Campo dei Fiori) fornirà l'innesco forzato ideale per forti rotazioni negli updraft (alto SRH)."
+        # Filtro per evento severo
+        if lr >= 28.0 and (rain >= 1.0 or cape >= 1500):
+            if cape >= 2200 and lr >= 30.0:
+                structure = "🔴 **Potenziale Supercellare con Rischio Grandine Grossa e Downburst**"
+                micro_note = (
+                    "Il richiamo caldo-umido padano impatta contro il massiccio del Campo dei Fiori fornendo la forzante meccanica. "
+                    "Se i venti a 500 hPa mantengono un vettore sudoccidentale teso (>40 kts), l'updraft acquisisce rotazione ciclonica (mesociclone)."
                 )
-            elif lr >= 29.0:
-                threat = "🟠 RISCHIO MODERATO: Multicelle Organizzate / Grandine Media"
-                desc = (
-                    f"Forte instabilità termodinamica ($\Delta T = {lr:.1f}^\circ\text{{C}}$). "
-                    "Favorevole allo sviluppo di cluster temporaleschi e squall line a rapida propagazione."
+            elif cape >= 1200:
+                structure = "🟠 **Multicella Intensa / Linea di Groppo (Squall Line)**"
+                micro_note = (
+                    "Possibile formazione di un sistema convettivo a mesoscala (MCS) in discesa dalle valli varesine e comasche verso Olgiate Olona e l'alto milanese."
                 )
             else:
-                threat = "🟡 RISCHIO CONVETTIVO: Rovesci Temporaleschi Sparsi"
-                desc = f"Instabilità ordinaria ($\Delta T = {lr:.1f}^\circ\text{{C}}$). Convezione pomeridiana o passaggio instabile."
+                structure = "🟡 **Rovesci Convettivi / Temporali di Sbarramento Orografico**"
+                micro_note = "Temporali a cella singola o piogge da sollevamento orografico senza rotazione organizzata."
                 
-            severe_windows.append({
-                "timestamp": t.strftime("%A %d/%m ore %H:%M UTC"),
-                "threat": threat,
-                "lapse_rate": lr,
-                "t850": t850,
+            local_alerts.append({
+                "time_str": t.strftime("%A %d/%m ore %H:%M UTC"),
+                "structure": structure,
+                "micro_note": micro_note,
+                "lr": lr,
                 "t500": t500,
-                "rain": rain,
-                "desc": desc
+                "t850": t850,
+                "cape": cape,
+                "dp": dp,
+                "rain": rain
             })
-            
-    return synoptic_summary, severe_windows, target_std
-  
+
+    return thermo_exp, cape_exp, delta_exp, local_alerts
+    
